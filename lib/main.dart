@@ -1,14 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'providers/expense_provider.dart';
 import 'screens/home_screen.dart';
 import 'screens/annual_screen.dart';
 import 'screens/ai_screen.dart';
 import 'screens/splash_screen.dart';
+import 'services/fcm_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Inicializar Firebase (necesario para FCM)
+  await Firebase.initializeApp();
+
+  // Inicializar servicio de notificaciones push
+  await FcmService.init();
+
   runApp(const GastosNaiaApp());
 }
 
