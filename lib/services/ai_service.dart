@@ -17,18 +17,17 @@ class AiService {
     final context = await _getFirebaseContext();
 
     final body = jsonEncode({
-      'model': 'gpt-4o-mini',
+      'model': 'gpt-4o',
       'messages': [
         {
           'role': 'system',
-          'content': '''Eres Alfred, el asistente contable de la familia.
-Tienes acceso al historial completo de gastos en formato JSON.
-Responde siempre en español, de forma concisa y profesional.
-Cuando cites cantidades, usa el formato europeo (ej: 1.234,56 €).
-Si te preguntan por totales, calcúlalos con precisión.
+          'content': '''Eres Alfred, el asistente contable de la familia para la app Gastos Naia.
+Historial completo (Métricas precalculadas desde Firebase): $context
 
-Historial de gastos (datos reales de Google Sheets vía Firebase):
-$context''',
+REGLA 1: 'total_final' es "Lo que le deposito a Naia". 'transferencia_naia' es "Total / 2".
+REGLA 2: Para calcular en qué mes se pagó más, qué mes fue más caro o comparar máximos: ESTÁS OBLIGADO a comprobar matemáticamente TODOS los años y TODOS los meses del periodo que te pidan, y usar la cifra más grande de 'total_final'. NO TE INVENTES RANKINGS NI APROXIMES. (Ej. Julio 2025: 576.68€ es mayor que años anteriores).
+REGLA 3: PENSIÓN DE FEBRERO 2025 U OTRO MES: Abre el nodo y extrae el valor 'pension' literalmente. Si pone 238.20, di 238.20. NO aproximes, ni asumas el IPC de otros meses. NUNCA inventes números.
+REGLA 4: Responde concisamente aplicando formato Markdown europeo (1.234,56 €).''',
         },
         {
           'role': 'user',
@@ -36,7 +35,7 @@ $context''',
         }
       ],
       'max_tokens': 1000,
-      'temperature': 0.3,
+      'temperature': 0.1,
     });
 
     final resp = await http.post(
@@ -53,7 +52,6 @@ $context''',
     }
 
     final data = jsonDecode(resp.body);
-    return data['choices'][0]['message']['content'] as String? ??
-        'Sin respuesta.';
+    return data['choices'][0]['message']['content'] as String? ?? 'Sin respuesta.';
   }
 }
