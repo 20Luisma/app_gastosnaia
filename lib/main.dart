@@ -12,11 +12,15 @@ import 'services/fcm_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Inicializar Firebase (necesario para FCM)
-  await Firebase.initializeApp();
-
-  // Inicializar servicio de notificaciones push
-  await FcmService.init();
+  try {
+    // Inicializar Firebase (necesario para FCM)
+    await Firebase.initializeApp();
+    
+    // Inicializar servicio de notificaciones push
+    await FcmService.init();
+  } catch (e) {
+    debugPrint('Firebase Firebase/FCM init failed: \$e');
+  }
 
   runApp(const GastosNaiaApp());
 }
