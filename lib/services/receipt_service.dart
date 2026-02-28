@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../config/secrets.dart';
+import '../config/service_account.dart';
+import 'package:googleapis_auth/auth_io.dart';
 
 class ReceiptService {
   String? _accessToken;
@@ -15,19 +17,17 @@ class ReceiptService {
         DateTime.now().isBefore(_tokenExpiry!)) {
       return _accessToken!;
     }
-    final resp = await http.post(
-      Uri.parse('https://oauth2.googleapis.com/token'),
-      body: {
-        'client_id': Secrets.googleClientId,
-        'client_secret': Secrets.googleClientSecret,
-        'refresh_token': Secrets.googleRefreshToken,
-        'grant_type': 'refresh_token',
-      },
-    ).timeout(_timeout);
-    final data = jsonDecode(resp.body);
-    _accessToken = data['access_token'];
-    _tokenExpiry = DateTime.now()
-        .add(Duration(seconds: (data['expires_in'] as int) - 60));
+    final accountCredentials = ServiceAccountCredentials.fromJson(ServiceAccount.json);
+    final scopes = [
+      'https://www.googleapis.com/auth/spreadsheets',
+      'https://www.googleapis.com/auth/drive'
+    ];
+    final client = await clientViaServiceAccount(accountCredentials, scopes);
+    
+    _accessToken = client.credentials.accessToken.data;
+    _tokenExpiry = client.credentials.accessToken.expiry.subtract(const Duration(seconds: 60));
+    
+    client.close();
     return _accessToken!;
   }
 
