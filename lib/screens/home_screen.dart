@@ -523,11 +523,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _payBizum(ExpenseProvider provider) async {
-    final halfStr = _currency.format(provider.halfTotal);
     final monthName = ExpenseProvider.monthNames[provider.selectedMonth].toLowerCase();
     
     final message = Uri.encodeComponent(
-      'Hola Irene, te he hecho un Bizum de $halfStr de los gastos extraescolares del mes de $monthName. Un saludo 😊'
+      'Hola Irene 👋 Aquí tienes los gastos extraescolares de $monthName.'
     );
     final phone = '34699889733'; // +34 699 889 733
     final url = Uri.parse('https://wa.me/$phone?text=$message');
@@ -539,7 +538,7 @@ class _HomeScreenState extends State<HomeScreen> {
       await Clipboard.setData(ClipboardData(text: provider.halfTotal.toStringAsFixed(2)));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Importe copiado: $halfStr (WhatsApp no disponible)')),
+          SnackBar(content: Text('Importe copiado: ${_currency.format(provider.halfTotal)} (WhatsApp no disponible)')),
         );
       }
     }
@@ -646,6 +645,48 @@ class _ReceiptsModalState extends State<_ReceiptsModal> {
     }
   }
 
+  Future<void> _deleteFile(DriveFile file) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        title: const Text('Eliminar archivo', style: TextStyle(color: Colors.white)),
+        content: Text(
+          '¿Eliminar "${file.filename}"?\nEsta acción no se puede deshacer.',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Eliminar', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await _driveService.deleteReceipt(file.id);
+      if (mounted) {
+        setState(() => _files.removeWhere((f) => f.id == file.id));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Archivo eliminado ✓'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al eliminar: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -702,9 +743,20 @@ class _ReceiptsModalState extends State<_ReceiptsModal> {
                             leading: Icon(isPdf ? Icons.picture_as_pdf : Icons.image, color: isPdf ? Colors.redAccent : Colors.blueAccent),
                             title: Text(f.filename, style: const TextStyle(color: Colors.white), maxLines: 1, overflow: TextOverflow.ellipsis),
                             subtitle: Text('${f.sizeText} • ${f.date}', style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12)),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.open_in_new, color: Colors.white),
-                              onPressed: () => _openFile(f.url),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.open_in_new_rounded, color: Colors.white70),
+                                  tooltip: 'Abrir',
+                                  onPressed: () => _openFile(f.url),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
+                                  tooltip: 'Eliminar',
+                                  onPressed: () => _deleteFile(f),
+                                ),
+                              ],
                             ),
                           );
                         },

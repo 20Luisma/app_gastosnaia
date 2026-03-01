@@ -50,3 +50,5 @@ lib/config/secrets.dart
 
 # Firebase configuration
 android/app/google-services.json
+
+lib/config/service_account.dart

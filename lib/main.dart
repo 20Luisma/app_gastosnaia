@@ -8,6 +8,7 @@ import 'screens/annual_screen.dart';
 import 'screens/ai_screen.dart';
 import 'screens/splash_screen.dart';
 import 'services/fcm_service.dart';
+import 'screens/pin_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -54,10 +55,11 @@ class GastosNaiaApp extends StatelessWidget {
             ),
           ),
         ),
-        initialRoute: '/splash',
+        initialRoute: '/pin',
         routes: {
           '/splash': (context) => const SplashScreen(),
-          '/home': (context) => const MainShell(),
+          '/pin':    (context) => const PinScreen(),
+          '/home':   (context) => const MainShell(),
         },
       ),
     );

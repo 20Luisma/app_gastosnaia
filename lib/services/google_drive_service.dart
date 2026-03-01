@@ -150,27 +150,14 @@ class GoogleDriveService {
     }
   }
 
+  /// Sube el recibo a través del backend PHP (que usa OAuth personal)
+  /// para evitar el error storageQuotaExceeded del Service Account.
   Future<DriveFile> uploadReceipt(int year, int month, String localFilePath, String originalName, String mimeType, List<int> fileBytes) async {
-    final folderId = await _getOrCreateMonthFolder(year, month);
-    final token = await _getAccessToken();
-    
-    final url = Uri.parse('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink,size,createdTime,fileExtension,mimeType');
-    
+    final url = Uri.parse('${Secrets.backendUrl}/index.php?action=upload');
+
     final request = http.MultipartRequest('POST', url);
-    request.headers['Authorization'] = 'Bearer $token';
-
-    // Metadata part
-    final metadata = {
-      'name': originalName,
-      'parents': [folderId],
-    };
-    request.files.add(http.MultipartFile.fromString(
-      'metadata',
-      jsonEncode(metadata),
-      contentType: MediaType('application', 'json'),
-    ));
-
-    // Media part
+    request.fields['year'] = year.toString();
+    request.fields['month'] = month.toString();
     request.files.add(http.MultipartFile.fromBytes(
       'file',
       fileBytes,
@@ -180,11 +167,29 @@ class GoogleDriveService {
 
     final streamedResponse = await request.send();
     final response = await http.Response.fromStream(streamedResponse);
-    
+
     if (response.statusCode == 200) {
-      return DriveFile.fromJson(jsonDecode(response.body));
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      if (json['error'] != null) {
+        throw Exception('Upload failed: ${json['error']}');
+      }
+      // Map backend response to DriveFile
+      final sizeBytes = json['sizeBytes'] as int? ?? 0;
+      String sizeText = '${(sizeBytes / 1024).toStringAsFixed(1)} KB';
+      if (sizeBytes > 1024 * 1024) {
+        sizeText = '${(sizeBytes / (1024 * 1024)).toStringAsFixed(2)} MB';
+      }
+      return DriveFile(
+        id: json['id'] ?? '',
+        filename: json['filename'] ?? originalName,
+        url: json['url'] ?? '',
+        sizeText: json['size_text'] ?? sizeText,
+        date: json['date'] ?? '',
+        type: json['type'] ?? 'unknown',
+      );
     } else {
-      throw Exception('Upload failed: ${response.body}');
+      final body = jsonDecode(response.body);
+      throw Exception('Upload failed: ${body['error'] ?? response.body}');
     }
   }
 
