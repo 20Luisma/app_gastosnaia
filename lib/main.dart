@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -6,12 +8,16 @@ import 'providers/expense_provider.dart';
 import 'screens/home_screen.dart';
 import 'screens/annual_screen.dart';
 import 'screens/ai_screen.dart';
+import 'screens/calendar_screen.dart';
+import 'screens/agenda_screen.dart';
+import 'screens/diario_screen.dart';
 import 'screens/splash_screen.dart';
 import 'services/fcm_service.dart';
 import 'screens/pin_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await initializeDateFormatting('es_ES', null);
 
   try {
     // Inicializar Firebase (necesario para FCM)
@@ -84,6 +90,8 @@ class _MainShellState extends State<MainShell> {
     _screens = [
       const HomeScreen(),
       AnnualScreen(key: _annualKey),
+      const AgendaScreen(),
+      const DiarioScreen(),
       const AiScreen(),
     ];
   }
@@ -116,6 +124,16 @@ class _MainShellState extends State<MainShell> {
               icon: Icon(Icons.bar_chart_outlined, color: Colors.white54),
               selectedIcon: Icon(Icons.bar_chart_rounded, color: Color(0xFF6C63FF)),
               label: 'Resumen',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.calendar_month_outlined, color: Colors.white54),
+              selectedIcon: Icon(Icons.calendar_month_rounded, color: Color(0xFF6C63FF)),
+              label: 'Agenda',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.mark_email_unread_outlined, color: Colors.white54),
+              selectedIcon: Icon(Icons.mark_email_unread_rounded, color: Color(0xFF6C63FF)),
+              label: 'Diario',
             ),
             NavigationDestination(
               icon: Icon(Icons.smart_toy_outlined, color: Colors.white54),
