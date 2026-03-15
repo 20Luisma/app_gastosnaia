@@ -147,7 +147,7 @@ class _DiarioScreenState extends State<DiarioScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            'Añade una nota o recuerdo sobre Naia\\npara que quede guardado.',
+            'Añade una nota o recuerdo sobre Naia para que quede guardado.',
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.white.withAlpha(120), fontSize: 16, height: 1.5),
           ),
