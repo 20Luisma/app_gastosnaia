@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:http/http.dart' as http;
 import '../services/calendar_service.dart';
 import '../services/ai_service.dart';
 import '../models/calendar_event.dart';
@@ -180,9 +182,189 @@ class CalendarScreenState extends State<CalendarScreen> {
 
   Future<void> _showMagicPlanDialog() async {
     final aiService = AiService();
-    final prompt = "Actúa como un experto planificador familiar divertido. Diseña un itineraries original y estructurado de 6 horas en Barcelona o alrededores para hoy, ideal para hacer con mi hija Naia de 10 años. Incluye actividades variadas (algunas gratuitas, otras de pago, parques, museos o manualidades) y un par de sugerencias concretas para comer o merendar. Formato de lista muy visual, corto, con emojis y horarios aproximados (ej: 12:00 a 18:00). Empieza directamente con el plan, sin presentaciones.";
-    
-    // 1. Mostrar Diálogo de Carga Estilizado
+
+    // ── 1. Detectar tiempo real en Barcelona via wttr.in ──────────────────
+    String? weatherDesc;
+    String weatherEmoji = '🌤️';
+    try {
+      final wRes = await http.get(
+        Uri.parse('https://wttr.in/Barcelona?format=j1'),
+      ).timeout(const Duration(seconds: 5));
+      if (wRes.statusCode == 200) {
+        final wData = jsonDecode(wRes.body);
+        final current = wData['current_condition']?[0];
+        if (current != null) {
+          final tempC = current['temp_C'];
+          final langEs = (current['lang_es'] as List?)?.firstOrNull;
+          final desc = langEs?['value'] ?? current['weatherDesc']?[0]?['value'] ?? '';
+          final code = int.tryParse(current['weatherCode'].toString()) ?? 0;
+          if (code == 113) weatherEmoji = '☀️';
+          else if ([116, 119].contains(code)) weatherEmoji = '⛅';
+          else if ([122, 143, 248].contains(code)) weatherEmoji = '☁️';
+          else if ([176,263,266,293,296,299,302,305,308,353,356,359].contains(code)) weatherEmoji = '🌧️';
+          else if ([389, 392, 395].contains(code)) weatherEmoji = '⛈️';
+          weatherDesc = '$weatherEmoji $desc, $tempC°C';
+        }
+      }
+    } catch (_) {}
+
+    // ── 2. Mostrar selector de clima y presupuesto ────────────────────────
+    String? climaSeleccionado;
+    String presupuestoSeleccionado = 'medio';
+
+    final opcionesClima = {
+      'sol': '☀️ Soleado',
+      'nublado': '⛅ Nublado',
+      'lluvia': '🌧️ Lluvia',
+      'calor': '🌡️ Mucho calor',
+      'frio': '❄️ Frío',
+    };
+
+    if (!mounted) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        String? climaLocal;
+        String presupLocal = 'medio';
+        return StatefulBuilder(
+          builder: (ctx, setS) => Dialog(
+            backgroundColor: const Color(0xFF1A1A2E),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Título
+                  const Row(children: [
+                    Text('✨', style: TextStyle(fontSize: 22)),
+                    SizedBox(width: 8),
+                    Text('Plan para hoy', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  ]),
+                  const SizedBox(height: 12),
+
+                  // Tiempo detectado
+                  if (weatherDesc != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(color: Colors.white.withOpacity(0.06), borderRadius: BorderRadius.circular(10)),
+                      child: Row(children: [
+                        const Icon(Icons.location_on, color: Color(0xFF8B5CF6), size: 16),
+                        const SizedBox(width: 6),
+                        Text('Barcelona · $weatherDesc', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                      ]),
+                    ),
+                  if (weatherDesc != null) const SizedBox(height: 14),
+
+                  // Selector clima
+                  Text('¿Qué tiempo hace hoy?', style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8, runSpacing: 8,
+                    children: opcionesClima.entries.map((e) => GestureDetector(
+                      onTap: () => setS(() => climaLocal = e.key),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: climaLocal == e.key ? const Color(0xFF8B5CF6).withOpacity(0.35) : Colors.white.withOpacity(0.06),
+                          border: Border.all(color: climaLocal == e.key ? const Color(0xFF8B5CF6) : Colors.white.withOpacity(0.15)),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(e.value, style: const TextStyle(color: Colors.white, fontSize: 13)),
+                      ),
+                    )).toList(),
+                  ),
+                  const SizedBox(height: 18),
+
+                  // Selector presupuesto
+                  Text('💰 Presupuesto para el día', style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12)),
+                  const SizedBox(height: 8),
+                  Row(children: [
+                    _presupBtn('bajo', '💚 Bajo', 'Gratis o casi', presupLocal, (v) => setS(() => presupLocal = v)),
+                    const SizedBox(width: 8),
+                    _presupBtn('medio', '🟡 Medio', '~20-40€', presupLocal, (v) => setS(() => presupLocal = v)),
+                    const SizedBox(width: 8),
+                    _presupBtn('alto', '🔴 Alto', 'Sin límite', presupLocal, (v) => setS(() => presupLocal = v)),
+                  ]),
+                  const SizedBox(height: 20),
+
+                  // Botón generar
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF8B5CF6),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                      ),
+                      onPressed: () {
+                        if (climaLocal == null && weatherDesc == null) {
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            const SnackBar(content: Text('☝️ Elige el tiempo que hace hoy para continuar'), backgroundColor: Color(0xFF8B5CF6)),
+                          );
+                          return;
+                        }
+                        climaSeleccionado = climaLocal;
+                        presupuestoSeleccionado = presupLocal;
+                        Navigator.pop(ctx, true);
+                      },
+                      child: const Text('Generar plan →', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
+    // ── 3. Construir prompt ──────────────────────────────────────────────
+    final climaTexto = opcionesClima[climaSeleccionado] ?? weatherDesc ?? 'tiempo agradable';
+    final presupTexto = presupuestoSeleccionado == 'bajo'
+        ? 'PRESUPUESTO BAJO: prioriza actividades gratuitas o de muy bajo coste, máximo 10€ por persona'
+        : presupuestoSeleccionado == 'alto'
+        ? 'PRESUPUESTO ALTO: puedes incluir entradas, restaurantes y experiencias premium'
+        : 'PRESUPUESTO MEDIO: mezcla gratuito con algún pago puntual, máximo 20-40€';
+
+    final tematicas = [
+      'aventura urbana y exploración de barrios',
+      'cultura y museos interactivos',
+      'naturaleza y aire libre',
+      'creatividad y manualidades o talleres',
+      'deporte y movimiento',
+      'gastronomía y descubrimiento de comidas',
+      'cine, libros y ocio tranquilo',
+      'tecnología y ciencia',
+      'historia y monumentos de Barcelona',
+      'mercados, escapadas y compras divertidas',
+    ];
+    final tematica = (tematicas..shuffle()).first;
+    final hoy = DateTime.now();
+    final diasSemana = ['lunes','martes','miércoles','jueves','viernes','sábado','domingo'];
+    final meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    final fechaStr = '${diasSemana[hoy.weekday - 1]} ${hoy.day} de ${meses[hoy.month - 1]}';
+
+    final prompt = 'Actúa como un experto planificador familiar local y práctico. '
+        'Hoy es $fechaStr en Barcelona. El tiempo que hace es: $climaTexto. '
+        'Diseña un plan ORIGINAL de temática "$tematica", de 6 horas (aprox 12:00-18:00) '
+        'para hacer con mi hija Naia de 10 años. '
+        'REGLAS IMPORTANTES: '
+        '(1) Todo el plan debe estar concentrado en UNA SOLA ZONA de Barcelona o alrededores (máximo 20km del centro); '
+        '(2) Los desplazamientos deben ser cortos, máximo 10-15 minutos andando o en metro; '
+        '(3) Adapta al clima: si llueve interior, si sol al aire libre; '
+        '(4) $presupTexto; '
+        '(5) Para cada lugar o restaurante añade el enlace de Google Maps: [Ver en Maps](https://maps.google.com/?q=NOMBRE+DEL+LUGAR+Barcelona). '
+        'Propón lugares CONCRETOS. Incluye sugerencia para comer/merendar. '
+        'Formato lista con emojis y horarios. Sin introducción.';
+
+    // ── 4. Loading ──────────────────────────────────────────────────────
+    if (!mounted) return;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -190,27 +372,26 @@ class CalendarScreenState extends State<CalendarScreen> {
         backgroundColor: const Color(0xFF1A1A2E),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const CircularProgressIndicator(color: Color(0xFF8B5CF6)),
-              const SizedBox(height: 20),
-              const Text('🪄 Generando Plan Mágico...', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 10),
-              Text('Pensando ideas divertidas para ti y Naia...\n(Puede tardar unos 20 segundos)', textAlign: TextAlign.center, style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 14)),
-            ],
-          ),
+          padding: const EdgeInsets.all(28.0),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const CircularProgressIndicator(color: Color(0xFF8B5CF6)),
+            const SizedBox(height: 20),
+            const Text('⏳ Generando plan...', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Text('Adaptando el plan al tiempo de hoy...', textAlign: TextAlign.center, style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 13)),
+          ]),
         ),
       ),
     );
 
+    // ── 5. Llamar a la IA ──────────────────────────────────────────────
     try {
-      final answer = await aiService.ask(prompt);
+      final answer = await aiService.askPlan(prompt);
       if (!mounted) return;
-      Navigator.pop(context); // Cerrar loading
+      Navigator.pop(context); // cerrar loading
 
-      // 2. Mostrar Diálogo con el Resultado
+      // ── 6. Mostrar resultado ──────────────────────────────────────────
+      if (!mounted) return;
       showDialog(
         context: context,
         builder: (ctx) => Dialog(
@@ -219,44 +400,71 @@ class CalendarScreenState extends State<CalendarScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Header con gradiente
               Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(colors: [Color(0xFF8B5CF6), Color(0xFFF43F5E)]),
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(colors: [Color(0xFF8B5CF6), Color(0xFFF43F5E)]),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
                 ),
                 width: double.infinity,
-                child: const Row(
-                  children: [
-                    Text('✨', style: TextStyle(fontSize: 24)),
-                    SizedBox(width: 8),
-                    Text('Plan Sorpresa Sugerido', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                  ],
-                ),
+                child: Row(children: [
+                  const Text('✨', style: TextStyle(fontSize: 22)),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text('Plan · $climaTexto', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                ]),
               ),
+              // Contenido del plan
               Flexible(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(20),
-                  child: Text(
-                    answer,
-                    style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.5),
-                  ),
+                  padding: const EdgeInsets.all(18),
+                  child: Text(answer, style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.55)),
                 ),
               ),
+              // Botones
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF6C63FF),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: Row(children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Color(0xFF2563EB)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(vertical: 11),
+                      ),
+                      icon: const Text('📱', style: TextStyle(fontSize: 15)),
+                      label: const Text('Telegram', style: TextStyle(color: Color(0xFF60A5FA), fontSize: 13)),
+                      onPressed: () async {
+                        try {
+                          await http.post(
+                            Uri.parse('https://contenido.creawebes.com/GastosNaia/?action=telegram_send_plan'),
+                            headers: {'Content-Type': 'application/json'},
+                            body: jsonEncode({'plan': answer, 'clima': climaTexto}),
+                          );
+                          if (ctx.mounted) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              const SnackBar(content: Text('✅ Plan enviado a Telegram'), backgroundColor: Colors.green),
+                            );
+                          }
+                        } catch (_) {
+                          if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Error al enviar a Telegram')));
+                        }
+                      },
                     ),
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text('¡Me encanta!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                   ),
-                ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF8B5CF6),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(vertical: 11),
+                      ),
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('¡Perfecto!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ]),
               ),
             ],
           ),
@@ -264,9 +472,33 @@ class CalendarScreenState extends State<CalendarScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      Navigator.pop(context); // Cerrar loading
+      Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error IA: $e')));
     }
+  }
+
+  /// Widget helper para los botones de presupuesto
+  Widget _presupBtn(String val, String label, String sub, String selected, void Function(String) onTap) {
+    final isSelected = val == selected;
+    final color = val == 'bajo' ? const Color(0xFF22C55E) : val == 'alto' ? const Color(0xFFEF4444) : const Color(0xFFEAB308);
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => onTap(val),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(vertical: 9),
+          decoration: BoxDecoration(
+            color: isSelected ? color.withOpacity(0.25) : Colors.white.withOpacity(0.06),
+            border: Border.all(color: isSelected ? color : Colors.white.withOpacity(0.15)),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Column(children: [
+            Text(label, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+            Text(sub, style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 11)),
+          ]),
+        ),
+      ),
+    );
   }
 
   @override

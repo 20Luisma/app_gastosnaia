@@ -54,4 +54,39 @@ REGLA 4: Responde concisamente aplicando formato Markdown europeo (1.234,56 €)
     final data = jsonDecode(resp.body);
     return data['choices'][0]['message']['content'] as String? ?? 'Sin respuesta.';
   }
+
+  /// Genera un plan de ocio familiar. Usa temperature=0.9 para máxima creatividad y variedad.
+  Future<String> askPlan(String prompt) async {
+    final body = jsonEncode({
+      'model': 'gpt-4o',
+      'messages': [
+        {
+          'role': 'system',
+          'content': 'Eres un experto planificador familiar local que conoce Barcelona y sus alrededores perfectamente.',
+        },
+        {
+          'role': 'user',
+          'content': prompt,
+        }
+      ],
+      'max_tokens': 1200,
+      'temperature': 0.9,
+    });
+
+    final resp = await http.post(
+      Uri.parse(_endpoint),
+      headers: {
+        'Authorization': 'Bearer ${Secrets.openAiApiKey}',
+        'Content-Type': 'application/json',
+      },
+      body: body,
+    );
+
+    if (resp.statusCode != 200) {
+      throw Exception('Error OpenAI (${resp.statusCode}): ${resp.body}');
+    }
+
+    final data = jsonDecode(resp.body);
+    return data['choices'][0]['message']['content'] as String? ?? 'Sin respuesta.';
+  }
 }
