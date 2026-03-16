@@ -418,7 +418,7 @@ class CalendarScreenState extends State<CalendarScreen> {
               Flexible(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.all(18),
-                  child: Text(answer, style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.55)),
+                  child: _buildFormattedPlan(answer),
                 ),
               ),
               // Botones
@@ -475,6 +475,66 @@ class CalendarScreenState extends State<CalendarScreen> {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error IA: $e')));
     }
+  }
+
+  /// Helper que parsea el texto buscando [Ver en Maps](http...) para crear links clickables
+  Widget _buildFormattedPlan(String text) {
+    final RegExp linkRegExp = RegExp(r'\[(.*?)\]\((.*?)\)');
+    final matches = linkRegExp.allMatches(text);
+
+    if (matches.isEmpty) {
+      return Text(text, style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.55));
+    }
+
+    final List<InlineSpan> spans = [];
+    int lastMatchEnd = 0;
+
+    for (final match in matches) {
+      // Texto antes del link
+      if (match.start > lastMatchEnd) {
+        spans.add(TextSpan(text: text.substring(lastMatchEnd, match.start)));
+      }
+
+      // El Link
+      final String linkText = match.group(1) ?? 'Ver en Maps';
+      final String linkUrl = match.group(2) ?? '';
+
+      spans.add(
+        WidgetSpan(
+          alignment: PlaceholderAlignment.middle,
+          child: InkWell(
+            onTap: () async {
+              final uri = Uri.tryParse(linkUrl);
+              if (uri != null && await canLaunchUrl(uri)) {
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              }
+            },
+            borderRadius: BorderRadius.circular(4),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              child: Text(
+                '📍 $linkText',
+                style: const TextStyle(color: Color(0xFF8B5CF6), fontSize: 13, fontWeight: FontWeight.bold, decoration: TextDecoration.underline),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      lastMatchEnd = match.end;
+    }
+
+    // Texto final después del último link
+    if (lastMatchEnd < text.length) {
+      spans.add(TextSpan(text: text.substring(lastMatchEnd)));
+    }
+
+    return RichText(
+      text: TextSpan(
+        style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.55),
+        children: spans,
+      ),
+    );
   }
 
   /// Widget helper para los botones de presupuesto
