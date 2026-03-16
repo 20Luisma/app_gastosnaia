@@ -533,10 +533,10 @@ class CalendarScreenState extends State<CalendarScreen> {
       if (match.group(3) != null) {
         // Es una URL plana
         linkUrl = match.group(3)!;
-        linkText = 'Ver enlace'; 
+        linkText = 'Ver ubicación en mapa'; 
       } else {
         // Es un enlace Markdown
-        linkText = match.group(1) ?? 'Ver enlace';
+        linkText = match.group(1) ?? 'Ver ubicación en mapa';
         linkUrl = match.group(2) ?? '';
       }
 

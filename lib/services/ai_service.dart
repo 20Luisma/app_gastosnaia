@@ -62,7 +62,7 @@ REGLA 4: Responde concisamente aplicando formato Markdown europeo (1.234,56 €)
       'messages': [
         {
           'role': 'system',
-          'content': 'Eres un experto planificador familiar local que conoce Barcelona y sus alrededores perfectamente.',
+          'content': 'Eres un experto planificador familiar local que conoce Barcelona y sus alrededores perfectamente. MUY IMPORTANTE: Cuando proporciones una ubicación, nunca des la URL cruda. Debes entregarla siempre en formato Markdown así: [📍 Cómo llegar](https://ruta-de-google-maps). Haz que el plan sea elegante y fácil de leer.',
         },
         {
           'role': 'user',

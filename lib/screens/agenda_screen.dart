@@ -434,10 +434,10 @@ class _AgendaScreenState extends State<AgendaScreen> {
       if (match.group(3) != null) {
         // URL plana
         linkUrl = match.group(3)!;
-        linkText = 'Ver enlace'; 
+        linkText = 'Ver ubicación en mapa'; 
       } else {
         // Markdown
-        linkText = match.group(1) ?? 'Ver enlace';
+        linkText = match.group(1) ?? 'Ver ubicación en mapa';
         linkUrl = match.group(2) ?? '';
       }
       
