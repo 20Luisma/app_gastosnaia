@@ -35,14 +35,21 @@ class _AgendaScreenState extends State<AgendaScreen> {
   Future<void> _loadAgenda(DateTime month) async {
     setState(() => _isLoading = true);
     try {
-      // Obtenemos eventos del mes actual
-      final currentEvents = await _calendarService.getEvents(month.year, month.month);
-      
-      // Para una agenda "más completa", podríamos cargar también el mes siguiente
-      final nextMonth = DateTime(month.year, month.month + 1, 1);
-      final nextEvents = await _calendarService.getEvents(nextMonth.year, nextMonth.month);
-      
-      final allEvents = [...currentEvents, ...nextEvents];
+      // Cargamos desde el mes actual hasta diciembre (año completo)
+      final endMonth = DateTime(month.year, 12, 1);
+
+      final monthsToLoad = <DateTime>[];
+      var m = DateTime(month.year, month.month, 1);
+      while (!m.isAfter(endMonth)) {
+        monthsToLoad.add(m);
+        m = DateTime(m.year, m.month + 1, 1);
+      }
+
+      final results = await Future.wait(
+        monthsToLoad.map((mo) => _calendarService.getEvents(mo.year, mo.month)),
+      );
+
+      final allEvents = results.expand((list) => list).toList();
       
       // Filtrar eventos pasados (dejamos solo desde hoy hacia el futuro)
       final today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
@@ -56,9 +63,11 @@ class _AgendaScreenState extends State<AgendaScreen> {
 
       setState(() => _events = futureEvents);
     } catch (e) {
-      if (mounted) {
+      debugPrint('Error en _loadAgenda: $e');
+      // No mostramos snackbar de error si ya hay eventos previos cargados
+      if (mounted && _events.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error cargando la agenda: \$e')),
+          const SnackBar(content: Text('Error cargando la agenda. Mostrando datos disponibles.')),
         );
       }
     } finally {
@@ -74,6 +83,23 @@ class _AgendaScreenState extends State<AgendaScreen> {
       builder: (ctx) => EventModal(
         selectedDay: event?.start ?? DateTime.now(),
         eventToEdit: event,
+        // Al darle a eliminar desde el modal, llamamos a la misma lógica 
+        // pero evitamos la doble confirmación (ya lo confirma el modal)
+        onDelete: () async {
+          if (event == null) return;
+          setState(() => _isLoading = true);
+          try {
+            await _calendarService.deleteEvent(event.id);
+            _reload();
+          } catch (e) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Error eliminando evento: $e')),
+              );
+            }
+            setState(() => _isLoading = false);
+          }
+        },
       ),
     );
 
@@ -81,7 +107,28 @@ class _AgendaScreenState extends State<AgendaScreen> {
       setState(() => _isLoading = true);
       try {
         if (result.id.isEmpty) {
-          await _calendarService.createEvent(result);
+          // Verificar si es un extraescolar con repetición semanal
+          if (result.repeatWeekly && (result.colorId == '10' || result.colorId == '6')) {
+            final instances = result.generateRecurringInstances();
+            await _calendarService.createEventBatch(instances);
+            if (mounted) {
+              final isVisita = result.colorId == '6';
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    isVisita
+                        ? '✓ ${instances.length} visitas creadas'
+                        : '✓ ${instances.length} extraescolares creados',
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                  backgroundColor: isVisita ? const Color(0xFFEAB308) : const Color(0xFF10B981),
+                  duration: const Duration(seconds: 3),
+                ),
+              );
+            }
+          } else {
+            await _calendarService.createEvent(result);
+          }
         } else {
           await _calendarService.updateEvent(result);
         }
@@ -89,7 +136,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-             SnackBar(content: Text('Error guardando evento: \$e')),
+             SnackBar(content: Text('Error guardando evento: $e')),
           );
         }
         setState(() => _isLoading = false);
@@ -270,6 +317,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
     if (event.colorId == '10') eventColor = const Color(0xFF10B981); // Extraescolar
     if (event.colorId == '3') eventColor = const Color(0xFF8B5CF6);  // Cita
     if (event.colorId == '11') eventColor = const Color(0xFFF43F5E); // Importante
+    if (event.colorId == '6') eventColor = const Color(0xFFEAB308);  // Visita
     
     final bool isLocationUrl = event.location.toLowerCase().startsWith('http');
         

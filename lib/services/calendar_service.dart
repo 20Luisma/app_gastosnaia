@@ -20,27 +20,38 @@ class CalendarService {
     final extraUrl = Uri.parse(
         '${Secrets.backendUrl}/?action=extraescolar_list&secret=${Secrets.webhookSecret}');
 
-    try {
-      // Lanzamos ambas peticiones en paralelo
-      final responses = await Future.wait([
-        http.get(gCalUrl, headers: _headers()).timeout(_timeout),
-        http.get(extraUrl, headers: _headers()).timeout(_timeout),
-      ]);
+    List<CalendarEvent> allEvents = [];
 
-      final gCalResp = responses[0];
-      final extraResp = responses[1];
-      
-      List<CalendarEvent> allEvents = [];
+    // Lanzamos ambas peticiones en paralelo, pero las manejamos de forma independiente
+    // para que un fallo en Google Calendar no impida mostrar los extraescolares locales.
+    final results = await Future.wait([
+      http.get(gCalUrl, headers: _headers()).timeout(_timeout).then<dynamic>((r) => r).catchError((e) {
+        debugPrint('GCal fetch failed: $e');
+        return null;
+      }),
+      http.get(extraUrl, headers: _headers()).timeout(_timeout).then<dynamic>((r) => r).catchError((e) {
+        debugPrint('Extraescolares fetch failed: $e');
+        return null;
+      }),
+    ]);
 
-      // Parsear Google Calendar
-      if (gCalResp.statusCode == 200) {
+    final gCalResp = results[0];
+    final extraResp = results[1];
+
+    // Parsear Google Calendar
+    if (gCalResp != null && gCalResp.statusCode == 200) {
+      try {
         final data = jsonDecode(gCalResp.body);
         final eventsList = (data['events'] as List?) ?? [];
         allEvents.addAll(eventsList.map((e) => CalendarEvent.fromJson(e)));
+      } catch (e) {
+        debugPrint('Error parsing GCal events: $e');
       }
+    }
 
-      // Parsear Extraescolares
-      if (extraResp.statusCode == 200) {
+    // Parsear Extraescolares
+    if (extraResp != null && extraResp.statusCode == 200) {
+      try {
         final data = jsonDecode(extraResp.body);
         final extraItems = (data['items'] as List?) ?? [];
         debugPrint('Extraescolares raw count: ${extraItems.length}');
@@ -54,20 +65,70 @@ class CalendarService {
         
         debugPrint('Extraescolares filtered for $year-$month count: ${filteredExtra.length}');
         allEvents.addAll(filteredExtra);
-      } else {
-        debugPrint('Extraescolares fetch failed: ${extraResp.statusCode}');
+      } catch (e) {
+        debugPrint('Error parsing extraescolar events: $e');
       }
+    }
 
-      return allEvents;
-    } catch (e) {
-      debugPrint('Exception fetching events: $e');
-      throw Exception('Error obteniendo eventos: $e');
+    return allEvents;
+  }
+
+
+  /// Crea múltiples eventos en lote
+  /// - Extraescolares (colorId '10') → extraescolar_save_batch (almacenamiento local JSON)
+  /// - Visitas (colorId '6') → calendar_create_batch (Google Calendar, color amarillo)
+  Future<void> createEventBatch(List<CalendarEvent> events) async {
+    // Separar por tipo
+    final extraEvents = events.where((e) => e.colorId == '10').toList();
+    final visitaEvents = events.where((e) => e.colorId == '6').toList();
+
+    // Extraescolares → local JSON
+    if (extraEvents.isNotEmpty) {
+      final url = Uri.parse('${Secrets.backendUrl}/?action=extraescolar_save_batch&secret=${Secrets.webhookSecret}');
+      final body = jsonEncode(extraEvents.map((e) => {
+        'title': e.title,
+        'description': e.description,
+        'location': e.location,
+        'allDay': e.allDay,
+        'start': e.start.toIso8601String(),
+        'end': e.end.toIso8601String(),
+        'color': '10',
+        'colorId': '10',
+        'isLocal': true,
+        'type': 'extraescolar',
+      }).toList());
+      final resp = await http.post(url, headers: _headers(), body: body).timeout(_timeout);
+      if (resp.statusCode != 200) {
+        throw Exception('Error creando extraescolares en lote: ${resp.body}');
+      }
+    }
+
+    // Visitas → Google Calendar (colorId '6' = amarillo)
+    if (visitaEvents.isNotEmpty) {
+      final url = Uri.parse('${Secrets.backendUrl}/?action=calendar_create_batch&secret=${Secrets.webhookSecret}');
+      final body = jsonEncode(visitaEvents.map((e) => {
+        'title': e.title,
+        'description': e.description,
+        'location': e.location,           // restaurada la ubicación (antes era '')
+        'allDay': e.allDay,
+        // toLocal() garantiza que la hora se envía sin 'Z' (UTC),
+        // así PHP la interpreta como Europe/Madrid y el cambio horario no la desplaza
+        'start': e.start.toLocal().toIso8601String(),
+        'end': e.end.toLocal().toIso8601String(),
+        'colorId': '6',
+      }).toList());
+      final resp = await http.post(url, headers: _headers(), body: body).timeout(_timeout);
+      if (resp.statusCode != 200) {
+        throw Exception('Error creando visitas en lote: ${resp.body}');
+      }
     }
   }
+
 
   /// Crea un nuevo evento en Google Calendar o Local Extraescolar
   Future<CalendarEvent> createEvent(CalendarEvent event) async {
     final isExtraescolar = event.colorId == '10';
+    // Extraescolares → endpoint local; el resto (Visitas, Citas, etc.) → Google Calendar
     final action = isExtraescolar ? 'extraescolar_save' : 'calendar_create';
     
     final url = Uri.parse('${Secrets.backendUrl}/?action=$action&secret=${Secrets.webhookSecret}');

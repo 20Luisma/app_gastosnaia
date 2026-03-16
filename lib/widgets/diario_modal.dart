@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:file_picker/file_picker.dart';
+import 'dart:typed_data';
 import '../models/comunicado.dart';
 import '../services/diario_service.dart';
 
@@ -20,6 +22,11 @@ class _DiarioModalState extends State<DiarioModal> {
   final _descController = TextEditingController();
   late DateTime _selectedDate;
   
+  // Manejo de archivos
+  PlatformFile? _selectedFile;
+  Uint8List? _selectedFileBytes;
+  bool _removeExistingFile = false; // Flag por si el usuario borra el adjunto preexistente
+
   bool _isLoading = false;
   final DiarioService _diarioService = DiarioService();
 
@@ -70,6 +77,37 @@ class _DiarioModalState extends State<DiarioModal> {
     }
   }
 
+  Future<void> _pickFile() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.any,
+        withData: true, // Importante para poder subirlo desde bytes (web/movil unificado)
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        setState(() {
+          _selectedFile = result.files.first;
+          _selectedFileBytes = result.files.first.bytes;
+          _removeExistingFile = true; // Si elegimos uno nuevo, el anterior se descarta
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error seleccionando archivo: $e')),
+        );
+      }
+    }
+  }
+
+  void _removeSelectedFile() {
+    setState(() {
+      _selectedFile = null;
+      _selectedFileBytes = null;
+      _removeExistingFile = true;
+    });
+  }
+
   Future<void> _save() async {
     if (_titleController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -81,15 +119,35 @@ class _DiarioModalState extends State<DiarioModal> {
     setState(() => _isLoading = true);
 
     try {
+      String? finalFileUrl = widget.comunicadoToEdit?.fileUrl;
+      String? finalFileType = widget.comunicadoToEdit?.fileType;
+      String? finalFileName = widget.comunicadoToEdit?.fileName;
+
+      // Si el usuario borró el archivo existente de forma explícita
+      if (_removeExistingFile && _selectedFile == null) {
+        finalFileUrl = null;
+        finalFileType = null;
+        finalFileName = null;
+      }
+
+      // Si hay un archivo NUEVO seleccionado, subirlo primero
+      if (_selectedFile != null && _selectedFileBytes != null) {
+        final uploadedUrl = await _diarioService.uploadAttachment(_selectedFileBytes!, _selectedFile!.name);
+        finalFileUrl = uploadedUrl;
+        finalFileName = _selectedFile!.name;
+        // Determinar tipo según extensión 
+        final ext = _selectedFile!.extension?.toLowerCase() ?? '';
+        finalFileType = ext == 'pdf' ? 'application/pdf' : 'image/$ext';
+      }
+
       final comunicado = Comunicado(
         id: widget.comunicadoToEdit?.id ?? '',
         title: _titleController.text.trim(),
         description: _descController.text.trim(),
         date: _selectedDate,
-        // Mantener info de archivo si existiera en caso de edición
-        fileUrl: widget.comunicadoToEdit?.fileUrl,
-        fileType: widget.comunicadoToEdit?.fileType,
-        fileName: widget.comunicadoToEdit?.fileName,
+        fileUrl: finalFileUrl,
+        fileType: finalFileType,
+        fileName: finalFileName,
       );
 
       await _diarioService.saveComunicado(comunicado);
@@ -100,7 +158,7 @@ class _DiarioModalState extends State<DiarioModal> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error guardando: \$e')),
+          SnackBar(content: Text('Error guardando: $e')),
         );
       }
     } finally {
@@ -147,7 +205,8 @@ class _DiarioModalState extends State<DiarioModal> {
                     icon: Icons.notes,
                     maxLines: 8,
                   ),
-                  // TODO: Opcional añadir botón o placeholder para multimedia más adelante
+                  const SizedBox(height: 24),
+                  _buildAttachmentSection(),
                 ],
               ),
             ),
@@ -250,13 +309,72 @@ class _DiarioModalState extends State<DiarioModal> {
     );
   }
 
+  Widget _buildAttachmentSection() {
+    String? displayFileName;
+    
+    if (_selectedFile != null) {
+      displayFileName = _selectedFile!.name;
+    } else if (!_removeExistingFile && widget.comunicadoToEdit?.fileUrl != null) {
+      displayFileName = widget.comunicadoToEdit?.fileName ?? 'Archivo adjunto';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F0F1A),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.attach_file, color: Color(0xFF6C63FF), size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: displayFileName != null
+                ? Text(
+                    displayFileName,
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  )
+                : const Text(
+                    'Adjuntar archivo...',
+                    style: TextStyle(color: Colors.white54, fontSize: 14),
+                  ),
+          ),
+          if (displayFileName != null)
+            IconButton(
+              icon: const Icon(Icons.close, color: Colors.white54, size: 20),
+              onPressed: _removeSelectedFile,
+              tooltip: 'Quitar archivo',
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            )
+          else
+            TextButton(
+              onPressed: _pickFile,
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFF6C63FF),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text('Explorar', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildFooter() {
     return Container(
       padding: EdgeInsets.only(
         left: 24,
         right: 24,
         top: 16,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+        bottom: MediaQuery.of(context).viewInsets.bottom > 0 
+                ? MediaQuery.of(context).viewInsets.bottom + 16 
+                : MediaQuery.of(context).padding.bottom + 24, // Añadido padding seguro para barra de navegación
       ),
       decoration: BoxDecoration(
         color: const Color(0xFF0F0F1A),

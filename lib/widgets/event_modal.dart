@@ -5,8 +5,9 @@ import '../models/calendar_event.dart';
 class EventModal extends StatefulWidget {
   final DateTime selectedDay;
   final CalendarEvent? eventToEdit;
+  final VoidCallback? onDelete; // Callback opcional para eliminar el evento
 
-  const EventModal({super.key, required this.selectedDay, this.eventToEdit});
+  const EventModal({super.key, required this.selectedDay, this.eventToEdit, this.onDelete});
 
   @override
   State<EventModal> createState() => _EventModalState();
@@ -27,13 +28,30 @@ class _EventModalState extends State<EventModal> {
   
   late String _colorId;
 
+  // Repetición (extraescolares y visitas)
+  bool _repeatWeekly = false;
+  final Set<int> _selectedWeekdays = {}; // 1=Lun..7=Dom (DateTime.weekday)
+  DateTime? _repeatUntil;
+  int _repeatEveryNWeeks = 1; // 1=cada semana, 2=sábados alternos
+
   // Options matching backend types
   final List<Map<String, dynamic>> _colorOptions = [
     {'id': '1', 'name': 'Evento General', 'color': const Color(0xFF3B82F6)},
     {'id': '3', 'name': 'Cita / Agenda', 'color': const Color(0xFF8B5CF6)},
     {'id': '10', 'name': 'Extraescolar', 'color': const Color(0xFF10B981)},
+    {'id': '6', 'name': 'Visita', 'color': const Color(0xFFEAB308)},
     {'id': '11', 'name': 'Importante', 'color': const Color(0xFFF43F5E)},
   ];
+
+  static const _weekdayLabels = {
+    1: 'Lun',
+    2: 'Mar',
+    3: 'Mié',
+    4: 'Jue',
+    5: 'Vie',
+    6: 'Sáb',
+    7: 'Dom',
+  };
 
   @override
   void initState() {
@@ -136,6 +154,49 @@ class _EventModalState extends State<EventModal> {
     }
   }
 
+  Future<void> _selectRepeatUntil(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _repeatUntil ?? _startDate.add(const Duration(days: 30)),
+      firstDate: _startDate,
+      lastDate: DateTime(2030),
+      helpText: 'Repetir hasta',
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.dark().copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: Color(0xFF10B981),
+              onPrimary: Colors.white,
+              surface: Color(0xFF1A1A2E),
+              onSurface: Colors.white,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() => _repeatUntil = picked);
+    }
+  }
+
+  /// Cuenta cuántas instancias se generarían con la config actual de repetición
+  int _countRecurringInstances() {
+    if (_selectedWeekdays.isEmpty || _repeatUntil == null) return 0;
+    int count = 0;
+    DateTime current = _startDate;
+    final until = DateTime(_repeatUntil!.year, _repeatUntil!.month, _repeatUntil!.day, 23, 59, 59);
+    final n = _repeatEveryNWeeks < 1 ? 1 : _repeatEveryNWeeks;
+    while (!current.isAfter(until)) {
+      if (_selectedWeekdays.contains(current.weekday)) {
+        final weeksElapsed = current.difference(_startDate).inDays ~/ 7;
+        if (weeksElapsed % n == 0) count++;
+      }
+      current = current.add(const Duration(days: 1));
+    }
+    return count;
+  }
+
   void _submit() {
     if (!_formKey.currentState!.validate()) return;
     
@@ -156,6 +217,23 @@ class _EventModalState extends State<EventModal> {
       return;
     }
 
+    // Validación de repetición
+    if (_repeatWeekly && (_colorId == '10' || _colorId == '6')) {
+      if (_selectedWeekdays.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Selecciona al menos un día de la semana para repetir.')),
+        );
+        return;
+      }
+      if (_repeatUntil == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Indica hasta qué fecha repetir el evento.')),
+        );
+        return;
+      }
+    }
+
+    final needsRepeat = (_colorId == '10' || _colorId == '6') && _repeatWeekly;
     final newEvent = CalendarEvent(
       id: widget.eventToEdit?.id ?? '',
       title: _titleController.text.trim(),
@@ -165,14 +243,49 @@ class _EventModalState extends State<EventModal> {
       end: finalEnd,
       allDay: _allDay,
       colorId: _colorId,
+      repeatWeekly: needsRepeat,
+      repeatWeekdays: needsRepeat ? _selectedWeekdays.toList() : [],
+      repeatUntil: needsRepeat ? _repeatUntil : null,
+      repeatEveryNWeeks: needsRepeat ? _repeatEveryNWeeks : 1,
     );
     
     Navigator.of(context).pop(newEvent);
   }
 
+  Future<void> _confirmDelete() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        title: const Text('Eliminar evento', style: TextStyle(color: Colors.white)),
+        content: const Text('¿Estás seguro de que deseas eliminar este evento?', style: TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false), 
+            child: const Text('Cancelar', style: TextStyle(color: Colors.white54))
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true), 
+            child: const Text('Eliminar', style: TextStyle(color: Color(0xFFF43F5E)))
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && widget.onDelete != null) {
+      widget.onDelete!();
+      if (mounted) Navigator.of(context).pop(); // Cerramos el modal
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final dateFormat = DateFormat('dd/MM/yyyy');
+    final bool isExtraescolar = _colorId == '10';
+    final bool isVisita = _colorId == '6';
+    final bool hasRepeat = isExtraescolar || isVisita;
+    final bool isCreating = widget.eventToEdit == null;
+    final Color accentColor = isVisita ? const Color(0xFFEAB308) : const Color(0xFF10B981);
     
     return Container(
       padding: EdgeInsets.only(
@@ -198,9 +311,19 @@ class _EventModalState extends State<EventModal> {
                       widget.eventToEdit == null ? 'Nuevo Evento' : 'Editar Evento',
                       style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white54),
-                      onPressed: () => Navigator.of(context).pop(),
+                    Row(
+                      children: [
+                        if (!isCreating && widget.onDelete != null)
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline, color: Color(0xFFF43F5E)),
+                            onPressed: _confirmDelete,
+                            tooltip: 'Eliminar',
+                          ),
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white54),
+                          onPressed: () => Navigator.of(context).pop(),
+                        )
+                      ],
                     )
                   ],
                 ),
@@ -213,7 +336,22 @@ class _EventModalState extends State<EventModal> {
                   children: _colorOptions.map((opt) {
                     final isSelected = _colorId == opt['id'];
                     return GestureDetector(
-                      onTap: () => setState(() => _colorId = opt['id']),
+                      onTap: () => setState(() {
+                        _colorId = opt['id'];
+                        // Reset repeat si se cambia de tipo
+                        if (opt['id'] != '10' && opt['id'] != '6') {
+                          _repeatWeekly = false;
+                          _repeatEveryNWeeks = 1;
+                        }
+                        // Auto-seleccionar sábado y modo alterno al elegir Visita
+                        if (opt['id'] == '6') {
+                          _selectedWeekdays.clear();
+                          _selectedWeekdays.add(6); // Sábado
+                          _repeatEveryNWeeks = 2;
+                        } else if (opt['id'] == '10') {
+                          _repeatEveryNWeeks = 1;
+                        }
+                      }),
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -322,7 +460,220 @@ class _EventModalState extends State<EventModal> {
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
+
+                // ── Sección Repetir (Extraescolar y Visita al crear) ──
+                if (hasRepeat && isCreating) ...[
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: accentColor.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: accentColor.withOpacity(0.25)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Toggle principal
+                        Row(
+                          children: [
+                            Icon(Icons.repeat_rounded, color: accentColor, size: 18),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'Repetir',
+                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14),
+                            ),
+                            const Spacer(),
+                            Switch(
+                              value: _repeatWeekly,
+                              activeColor: accentColor,
+                              onChanged: (v) => setState(() => _repeatWeekly = v),
+                            ),
+                          ],
+                        ),
+
+                        // Opciones (visibles solo si está activo)
+                        AnimatedCrossFade(
+                          duration: const Duration(milliseconds: 250),
+                          crossFadeState: _repeatWeekly ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+                          firstChild: const SizedBox.shrink(),
+                          secondChild: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // ── Selector de frecuencia (solo Visita) ──
+                              if (isVisita) ...[
+                                const Text(
+                                  'FRECUENCIA:',
+                                  style: TextStyle(color: Colors.white54, fontSize: 11, letterSpacing: 0.8),
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    GestureDetector(
+                                      onTap: () => setState(() {
+                                        if (_repeatEveryNWeeks > 1) _repeatEveryNWeeks--;
+                                      }),
+                                      child: Container(
+                                        width: 36, height: 36,
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withOpacity(0.07),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Icon(Icons.remove, color: accentColor, size: 18),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      _repeatEveryNWeeks == 1 ? 'Cada semana' : 'Cada $_repeatEveryNWeeks semanas',
+                                      style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    GestureDetector(
+                                      onTap: () => setState(() {
+                                        if (_repeatEveryNWeeks < 8) _repeatEveryNWeeks++;
+                                      }),
+                                      child: Container(
+                                        width: 36, height: 36,
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withOpacity(0.07),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Icon(Icons.add, color: accentColor, size: 18),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 14),
+                              ],
+
+                              // ── Día(s) de la semana ──
+                              Text(
+                                isExtraescolar ? 'DÍAS DE LA SEMANA:' : 'DÍA DE LA SEMANA:',
+                                style: const TextStyle(color: Colors.white54, fontSize: 11, letterSpacing: 0.8),
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: _weekdayLabels.entries.map((entry) {
+                                  final isSelected = _selectedWeekdays.contains(entry.key);
+                                  return GestureDetector(
+                                    onTap: () => setState(() {
+                                      if (isExtraescolar) {
+                                        // Extraescolar: multiselección
+                                        if (isSelected) {
+                                          _selectedWeekdays.remove(entry.key);
+                                        } else {
+                                          _selectedWeekdays.add(entry.key);
+                                        }
+                                      } else {
+                                        // Visita: un solo día
+                                        _selectedWeekdays
+                                          ..clear()
+                                          ..add(entry.key);
+                                      }
+                                    }),
+                                    child: AnimatedContainer(
+                                      duration: const Duration(milliseconds: 150),
+                                      width: 40,
+                                      height: 36,
+                                      decoration: BoxDecoration(
+                                        color: isSelected ? accentColor : Colors.white.withOpacity(0.07),
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                          color: isSelected ? accentColor : Colors.white.withOpacity(0.15),
+                                        ),
+                                      ),
+                                      child: Center(
+                                        child: Text(
+                                          entry.value,
+                                          style: TextStyle(
+                                            color: isSelected ? Colors.white : Colors.white60,
+                                            fontSize: 11,
+                                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                              const SizedBox(height: 14),
+
+                              // Selector "Repetir hasta"
+                              const Text(
+                                'REPETIR HASTA:',
+                                style: TextStyle(color: Colors.white54, fontSize: 11, letterSpacing: 0.8),
+                              ),
+                              const SizedBox(height: 8),
+                              GestureDetector(
+                                onTap: () => _selectRepeatUntil(context),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.2),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: _repeatUntil != null
+                                          ? accentColor.withOpacity(0.5)
+                                          : Colors.white.withOpacity(0.1),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.calendar_today,
+                                        size: 16,
+                                        color: _repeatUntil != null ? accentColor : Colors.white54,
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Text(
+                                        _repeatUntil != null
+                                            ? DateFormat('dd/MM/yyyy').format(_repeatUntil!)
+                                            : 'Seleccionar fecha límite',
+                                        style: TextStyle(
+                                          color: _repeatUntil != null ? Colors.white : Colors.white54,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+
+                              // Preview del número de instancias
+                              if ((isVisita || _selectedWeekdays.isNotEmpty) && _repeatUntil != null) ...[
+                                const SizedBox(height: 10),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: accentColor.withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.info_outline, size: 14, color: accentColor),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        'Se crearán ${_countRecurringInstances()} eventos',
+                                        style: TextStyle(
+                                          color: accentColor,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                ],
 
                 ElevatedButton(
                   onPressed: _submit,

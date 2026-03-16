@@ -86,7 +86,26 @@ class CalendarScreenState extends State<CalendarScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => EventModal(selectedDay: _selectedDay ?? _focusedDay, eventToEdit: event),
+      builder: (ctx) => EventModal(
+        selectedDay: event?.start ?? _selectedDay ?? _focusedDay,
+        eventToEdit: event,
+        // Callback para borrar desde dentro del modal
+        onDelete: () async {
+          if (event == null) return;
+          setState(() => _isLoading = true);
+          try {
+            await _calendarService.deleteEvent(event.id);
+            reload();
+          } catch (e) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Error eliminando evento: $e')),
+              );
+            }
+            setState(() => _isLoading = false);
+          }
+        },
+      ),
     );
 
     if (result != null) {
@@ -98,7 +117,22 @@ class CalendarScreenState extends State<CalendarScreen> {
     setState(() => _isLoading = true);
     try {
       if (event.id.isEmpty) {
-        await _calendarService.createEvent(event);
+        // Verificar si es un extraescolar con repetición semanal
+        if (event.repeatWeekly && (event.colorId == '10' || event.colorId == '6')) {
+          final instances = event.generateRecurringInstances();
+          await _calendarService.createEventBatch(instances);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('✓ ${instances.length} extraescolares creados', style: const TextStyle(color: Colors.white)),
+                backgroundColor: const Color(0xFF10B981), // Color extraescolar (verde)
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+        } else {
+          await _calendarService.createEvent(event);
+        }
       } else {
         await _calendarService.updateEvent(event);
       }
@@ -106,7 +140,7 @@ class CalendarScreenState extends State<CalendarScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error guardando evento: \$e')),
+          SnackBar(content: Text('Error guardando evento: $e')),
         );
       }
       setState(() => _isLoading = false);
@@ -211,6 +245,7 @@ class CalendarScreenState extends State<CalendarScreen> {
                   if (event.colorId == '10') markerColor = const Color(0xFF10B981);
                   if (event.colorId == '3') markerColor = const Color(0xFF8B5CF6);
                   if (event.colorId == '11') markerColor = const Color(0xFFF43F5E);
+                  if (event.colorId == '6') markerColor = const Color(0xFFEAB308);  // Visita
                   return Container(
                     margin: const EdgeInsets.symmetric(horizontal: 1.5),
                     width: 7,
@@ -240,7 +275,7 @@ class CalendarScreenState extends State<CalendarScreen> {
                     ),
                   )
                 : ListView.builder(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.only(left: 16, right: 16, top: 16, bottom: 80), // Añadido margen inferior para el botón
                     itemCount: eventsForSelectedDay.length,
                     itemBuilder: (context, index) {
                       final event = eventsForSelectedDay[index];
@@ -269,6 +304,7 @@ class CalendarScreenState extends State<CalendarScreen> {
     if (event.colorId == '10') eventColor = const Color(0xFF10B981); // Extraescolar
     if (event.colorId == '3') eventColor = const Color(0xFF8B5CF6);  // Cita
     if (event.colorId == '11') eventColor = const Color(0xFFF43F5E); // Importante
+    if (event.colorId == '6') eventColor = const Color(0xFFEAB308);  // Visita
     
     final bool isLocationUrl = event.location.toLowerCase().startsWith('http');
         

@@ -82,6 +82,29 @@ class DiarioService {
     return data['id']?.toString() ?? comunicado.id;
   }
 
+  /// Uploads a file attachment for a comunicado
+  Future<String> uploadAttachment(List<int> bytes, String filename) async {
+    final url = Uri.parse(
+        '${Secrets.backendUrl}/?action=uploadComunicado&secret=${Secrets.webhookSecret}');
+
+    final request = http.MultipartRequest('POST', url)
+      ..files.add(http.MultipartFile.fromBytes('file', bytes, filename: filename));
+
+    final streamedResponse = await request.send().timeout(_timeout);
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode != 200) {
+      throw Exception('Error subiendo archivo: ${response.body}');
+    }
+
+    final data = jsonDecode(response.body);
+    if (data['success'] != true || data['url'] == null) {
+      throw Exception('El servidor no devolvió una URL válida: ${response.body}');
+    }
+
+    return data['url'];
+  }
+
   /// Delete a comunicado
   Future<bool> deleteComunicado(String id) async {
     final url = Uri.parse(

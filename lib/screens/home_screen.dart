@@ -117,10 +117,11 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: [
               _infoChip('Pensión: ${_currency.format(provider.pension)}', onTap: () => _showPensionDialog(context, provider)),
-              const SizedBox(width: 8),
               // Bizum WhatsApp button
               GestureDetector(
                 onTap: () => _payBizum(provider),
@@ -140,26 +141,23 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
               // Receipts global button
-              Expanded(
-                child: GestureDetector(
-                  onTap: () => _showReceiptsModal(provider.selectedYear, provider.selectedMonth),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.receipt_long_rounded, color: Colors.white, size: 13),
-                        SizedBox(width: 4),
-                        Flexible(child: Text('Recibos', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
-                      ],
-                    ),
+              GestureDetector(
+                onTap: () => _showReceiptsModal(provider.selectedYear, provider.selectedMonth),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.receipt_long_rounded, color: Colors.white, size: 13),
+                      SizedBox(width: 4),
+                      Text('Recibos', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                    ],
                   ),
                 ),
               ),
