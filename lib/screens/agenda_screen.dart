@@ -346,7 +346,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (event.colorId != '6') Container(width: 4, color: eventColor),
+                Container(width: 4, color: eventColor),
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
