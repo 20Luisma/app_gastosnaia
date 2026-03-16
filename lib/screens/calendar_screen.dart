@@ -784,19 +784,14 @@ class CalendarScreenState extends State<CalendarScreen> {
                                         style: TextStyle(color: Color(0xFF6C63FF), fontSize: 13, decoration: TextDecoration.underline, decorationColor: Color(0xFF6C63FF)),
                                       ),
                                     )
-                                  : Text(event.location, style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                  : _buildFormattedPlan(event.location), // Reutilizamos el parser por si mandan la URL en markdown
                               ),
                             ],
                           ),
                         ],
                         if (event.description.isNotEmpty) ...[
                           const SizedBox(height: 8),
-                          Text(
-                            event.description,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 13),
-                          ),
+                          _buildFormattedPlan(event.description), // Parsear la descripción entera para que los enlaces se hagan botones
                         ]
                       ],
                     ),
