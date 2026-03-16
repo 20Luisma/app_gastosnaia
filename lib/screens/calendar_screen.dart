@@ -785,7 +785,7 @@ class CalendarScreenState extends State<CalendarScreen> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Container(width: 6, color: eventColor),
+                if (event.colorId != '6') Container(width: 6, color: eventColor),
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
