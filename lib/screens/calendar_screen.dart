@@ -3,6 +3,7 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/calendar_service.dart';
+import '../services/ai_service.dart';
 import '../models/calendar_event.dart';
 import '../widgets/event_modal.dart';
 
@@ -177,6 +178,97 @@ class CalendarScreenState extends State<CalendarScreen> {
     }
   }
 
+  Future<void> _showMagicPlanDialog() async {
+    final aiService = AiService();
+    final prompt = "Actúa como un experto planificador familiar divertido. Diseña un itineraries original y estructurado de 6 horas en Barcelona o alrededores para hoy, ideal para hacer con mi hija Naia de 10 años. Incluye actividades variadas (algunas gratuitas, otras de pago, parques, museos o manualidades) y un par de sugerencias concretas para comer o merendar. Formato de lista muy visual, corto, con emojis y horarios aproximados (ej: 12:00 a 18:00). Empieza directamente con el plan, sin presentaciones.";
+    
+    // 1. Mostrar Diálogo de Carga Estilizado
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Dialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(color: Color(0xFF8B5CF6)),
+              const SizedBox(height: 20),
+              const Text('🪄 Generando Plan Mágico...', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 10),
+              Text('Pensando ideas divertidas para ti y Naia...\n(Puede tardar unos 20 segundos)', textAlign: TextAlign.center, style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 14)),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    try {
+      final answer = await aiService.ask(prompt);
+      if (!mounted) return;
+      Navigator.pop(context); // Cerrar loading
+
+      // 2. Mostrar Diálogo con el Resultado
+      showDialog(
+        context: context,
+        builder: (ctx) => Dialog(
+          backgroundColor: const Color(0xFF1A1A2E),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(colors: [Color(0xFF8B5CF6), Color(0xFFF43F5E)]),
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                ),
+                width: double.infinity,
+                child: const Row(
+                  children: [
+                    Text('✨', style: TextStyle(fontSize: 24)),
+                    SizedBox(width: 8),
+                    Text('Plan Sorpresa Sugerido', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: Text(
+                    answer,
+                    style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.5),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF6C63FF),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('¡Me encanta!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context); // Cerrar loading
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error IA: $e')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final eventsForSelectedDay = _getEventsForDay(_selectedDay ?? _focusedDay);
@@ -263,6 +355,34 @@ class CalendarScreenState extends State<CalendarScreen> {
           
           const SizedBox(height: 16),
           
+          // -----> Botón Varita Mágica <-----
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: GestureDetector(
+              onTap: _showMagicPlanDialog,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(begin: Alignment.centerLeft, end: Alignment.centerRight, colors: [Color(0xFFFF6B6B), Color(0xFFFF8E53)]),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(color: const Color(0xFFFF6B6B).withOpacity(0.4), blurRadius: 10, offset: const Offset(0, 4)),
+                  ],
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text('🪄', style: TextStyle(fontSize: 20)),
+                    SizedBox(width: 8),
+                    Text('Sugerir Plan Sorpresa', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
           if (_isLoading)
             const Expanded(child: Center(child: CircularProgressIndicator(color: Color(0xFF6C63FF))))
           else
