@@ -319,7 +319,8 @@ class _AgendaScreenState extends State<AgendaScreen> {
     if (event.colorId == '11') eventColor = const Color(0xFFF43F5E); // Importante
     if (event.colorId == '6') eventColor = const Color(0xFFEAB308);  // Visita
     
-    final String trimmedLoc = event.location.trim();
+    // Eliminamos el Zero-Width Space (\u200B) que inyecta PHP
+    final String trimmedLoc = event.location.replaceAll('\u200B', '').trim();
     final bool isLocationUrl = trimmedLoc.toLowerCase().startsWith('http');
         
     return GestureDetector(
