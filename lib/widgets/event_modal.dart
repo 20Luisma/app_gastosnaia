@@ -34,6 +34,9 @@ class _EventModalState extends State<EventModal> {
   DateTime? _repeatUntil;
   int _repeatEveryNWeeks = 1; // 1=cada semana, 2=sábados alternos
 
+  // Recordatorios (Alarmas nativas de Google Calendar)
+  int? _reminderMinutes;
+
   // Options matching backend types
   final List<Map<String, dynamic>> _colorOptions = [
     {'id': '1', 'name': 'Evento General', 'color': const Color(0xFF3B82F6)},
@@ -71,12 +74,14 @@ class _EventModalState extends State<EventModal> {
       _startTime = TimeOfDay.fromDateTime(ev.start);
       _endDate = ev.end;
       _endTime = TimeOfDay.fromDateTime(ev.end);
+      _reminderMinutes = ev.reminderMinutes;
     } else {
       _startDate = widget.selectedDay;
       final now = DateTime.now();
       _startTime = TimeOfDay(hour: now.hour + 1, minute: 0); // Next hour by default
       _endDate = widget.selectedDay;
       _endTime = TimeOfDay(hour: now.hour + 2, minute: 0);
+      _reminderMinutes = null; // Sin recordatorio por defecto
     }
   }
 
@@ -247,6 +252,7 @@ class _EventModalState extends State<EventModal> {
       repeatWeekdays: needsRepeat ? _selectedWeekdays.toList() : [],
       repeatUntil: needsRepeat ? _repeatUntil : null,
       repeatEveryNWeeks: needsRepeat ? _repeatEveryNWeeks : 1,
+      reminderMinutes: _colorId != '10' ? _reminderMinutes : null, // Extraescolares no tienen alarma en GCal
     );
     
     Navigator.of(context).pop(newEvent);
@@ -461,6 +467,38 @@ class _EventModalState extends State<EventModal> {
                   ),
                 ),
                 const SizedBox(height: 20),
+
+                // ── Sección Recordatorio (Alarma nativa GCal) ──
+                if (_colorId != '10') ...[
+                  DropdownButtonFormField<int?>(
+                    value: _reminderMinutes,
+                    dropdownColor: const Color(0xFF1A1A2E),
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      labelText: 'Avisarme (Notificación en el móvil)',
+                      labelStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
+                      prefixIcon: const Icon(Icons.notifications_active_outlined, color: Colors.white54),
+                      filled: true,
+                      fillColor: Colors.black.withOpacity(0.2),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: null, child: Text('Sin alarma')),
+                      DropdownMenuItem(value: 0, child: Text('A la hora exacta')),
+                      DropdownMenuItem(value: 10, child: Text('10 minutos antes')),
+                      DropdownMenuItem(value: 30, child: Text('30 minutos antes')),
+                      DropdownMenuItem(value: 60, child: Text('1 hora antes')),
+                      DropdownMenuItem(value: 120, child: Text('2 horas antes')),
+                      DropdownMenuItem(value: 1440, child: Text('1 día antes')),
+                    ],
+                    onChanged: (int? value) {
+                      setState(() {
+                        _reminderMinutes = value;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 20),
+                ],
 
                 // ── Sección Repetir (Extraescolar y Visita al crear) ──
                 if (hasRepeat && isCreating) ...[

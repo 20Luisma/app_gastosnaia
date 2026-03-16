@@ -116,6 +116,7 @@ class CalendarService {
         'start': e.start.toLocal().toIso8601String(),
         'end': e.end.toLocal().toIso8601String(),
         'colorId': '6',
+        'reminderMinutes': e.reminderMinutes,
       }).toList());
       final resp = await http.post(url, headers: _headers(), body: body).timeout(_timeout);
       if (resp.statusCode != 200) {

@@ -15,6 +15,9 @@ class CalendarEvent {
   final List<int> repeatWeekdays; // 1=Lun, 2=Mar, 3=Mié, 4=Jue, 5=Vie, 6=Sáb, 7=Dom (DateTime.weekday)
   final DateTime? repeatUntil;
   final int repeatEveryNWeeks; // 1=cada semana, 2=cada 2 semanas (sábados alternos), etc.
+  
+  // Alarma/Recordatorio nativo
+  final int? reminderMinutes;
 
   CalendarEvent({
     required this.id,
@@ -29,6 +32,7 @@ class CalendarEvent {
     this.repeatWeekdays = const [],
     this.repeatUntil,
     this.repeatEveryNWeeks = 1,
+    this.reminderMinutes,
   });
 
   factory CalendarEvent.fromJson(Map<String, dynamic> json) {
@@ -41,6 +45,7 @@ class CalendarEvent {
       end: DateTime.tryParse(json['end']?.toString() ?? '')?.toLocal() ?? DateTime.now(),
       allDay: json['allDay'] as bool? ?? false,
       colorId: json['color']?.toString() ?? json['colorId']?.toString(), // 'color' from API, 'colorId' for creation/update
+      reminderMinutes: json['reminderMinutes'] as int?,
     );
   }
 
@@ -54,6 +59,7 @@ class CalendarEvent {
       'end': end.toIso8601String(),
       'allDay': allDay,
       'colorId': colorId,
+      'reminderMinutes': reminderMinutes,
     };
   }
 
@@ -87,6 +93,7 @@ class CalendarEvent {
             ),
             allDay: allDay,
             colorId: colorId,
+            reminderMinutes: reminderMinutes,
           ));
         }
       }
@@ -112,6 +119,7 @@ class CalendarEvent {
     List<int>? repeatWeekdays,
     DateTime? repeatUntil,
     int? repeatEveryNWeeks,
+    int? reminderMinutes,
   }) {
     return CalendarEvent(
       id: id ?? this.id,
@@ -126,6 +134,7 @@ class CalendarEvent {
       repeatWeekdays: repeatWeekdays ?? this.repeatWeekdays,
       repeatUntil: repeatUntil ?? this.repeatUntil,
       repeatEveryNWeeks: repeatEveryNWeeks ?? this.repeatEveryNWeeks,
+      reminderMinutes: reminderMinutes ?? this.reminderMinutes,
     );
   }
 }
