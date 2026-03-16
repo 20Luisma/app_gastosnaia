@@ -319,7 +319,8 @@ class _AgendaScreenState extends State<AgendaScreen> {
     if (event.colorId == '11') eventColor = const Color(0xFFF43F5E); // Importante
     if (event.colorId == '6') eventColor = const Color(0xFFEAB308);  // Visita
     
-    final bool isLocationUrl = event.location.toLowerCase().startsWith('http');
+    final String trimmedLoc = event.location.trim();
+    final bool isLocationUrl = trimmedLoc.toLowerCase().startsWith('http');
         
     return GestureDetector(
       onTap: () => _showEventModal(event),
@@ -372,13 +373,14 @@ class _AgendaScreenState extends State<AgendaScreen> {
                                 child: isLocationUrl 
                                   ? GestureDetector(
                                       onTap: () async {
-                                        final uri = Uri.parse(event.location);
-                                        if (await canLaunchUrl(uri)) {
+                                        final cleanUrl = trimmedLoc.replaceAll(' ', '%20');
+                                        final uri = Uri.tryParse(cleanUrl);
+                                        if (uri != null && await canLaunchUrl(uri)) {
                                           await launchUrl(uri, mode: LaunchMode.externalApplication);
                                         }
                                       },
                                       child: const Text(
-                                        'Abrir mapa', 
+                                        'Ver ubicación en mapa', 
                                         style: TextStyle(color: Color(0xFF6C63FF), fontSize: 13, decoration: TextDecoration.underline, decorationColor: Color(0xFF6C63FF))
                                       ),
                                     )
@@ -392,6 +394,10 @@ class _AgendaScreenState extends State<AgendaScreen> {
                             ],
                           ],
                         ),
+                        if (event.description.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          _buildFormattedPlan(event.description), // Mostrar descripción con links
+                        ]
                       ],
                     ),
                   ),
@@ -400,6 +406,74 @@ class _AgendaScreenState extends State<AgendaScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  /// Helper que parsea el texto buscando enlaces Markdown o URLs planas para crear links
+  Widget _buildFormattedPlan(String text) {
+    // 1. Busca enlaces Markdown [Texto](URL) y 2. Busca URLs planas http/https
+    final RegExp linkRegExp = RegExp(r'\[(.*?)\]\((.*?)\)|(https?:\/\/[^\s]+)');
+    final matches = linkRegExp.allMatches(text);
+
+    if (matches.isEmpty) {
+      return Text(text, style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 13, height: 1.5));
+    }
+
+    final List<InlineSpan> spans = [];
+    int lastMatchEnd = 0;
+
+    for (final match in matches) {
+      if (match.start > lastMatchEnd) {
+        spans.add(TextSpan(text: text.substring(lastMatchEnd, match.start)));
+      }
+
+      String linkText;
+      String linkUrl;
+
+      if (match.group(3) != null) {
+        // URL plana
+        linkUrl = match.group(3)!;
+        linkText = 'Ver enlace'; 
+      } else {
+        // Markdown
+        linkText = match.group(1) ?? 'Ver enlace';
+        linkUrl = match.group(2) ?? '';
+      }
+      
+      spans.add(
+        WidgetSpan(
+          alignment: PlaceholderAlignment.middle,
+          child: InkWell(
+            onTap: () async {
+              final uri = Uri.tryParse(linkUrl);
+              if (uri != null && await canLaunchUrl(uri)) {
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              }
+            },
+            borderRadius: BorderRadius.circular(4),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              child: Text(
+                '📍 $linkText',
+                style: const TextStyle(color: Color(0xFF8B5CF6), fontSize: 13, fontWeight: FontWeight.bold, decoration: TextDecoration.underline),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      lastMatchEnd = match.end;
+    }
+
+    if (lastMatchEnd < text.length) {
+      spans.add(TextSpan(text: text.substring(lastMatchEnd)));
+    }
+
+    return RichText(
+      text: TextSpan(
+        style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 13, height: 1.5),
+        children: spans,
       ),
     );
   }

@@ -8,6 +8,7 @@ import '../services/calendar_service.dart';
 import '../services/ai_service.dart';
 import '../models/calendar_event.dart';
 import '../widgets/event_modal.dart';
+import '../config/secrets.dart';
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -436,18 +437,47 @@ class CalendarScreenState extends State<CalendarScreen> {
                       label: const Text('Telegram', style: TextStyle(color: Color(0xFF60A5FA), fontSize: 13)),
                       onPressed: () async {
                         try {
-                          await http.post(
-                            Uri.parse('https://contenido.creawebes.com/GastosNaia/?action=telegram_send_plan'),
+                          final response = await http.post(
+                            Uri.parse('https://contenido.creawebes.com/GastosNaia/?action=telegram_send_plan&secret=${Secrets.webhookSecret}'),
                             headers: {'Content-Type': 'application/json'},
                             body: jsonEncode({'plan': answer, 'clima': climaTexto}),
                           );
                           if (ctx.mounted) {
-                            ScaffoldMessenger.of(ctx).showSnackBar(
-                              const SnackBar(content: Text('✅ Plan enviado a Telegram'), backgroundColor: Colors.green),
+                            if (response.statusCode == 200) {
+                              showDialog(
+                                context: ctx,
+                                builder: (_) => AlertDialog(
+                                  backgroundColor: const Color(0xFF1A1A2E),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                  title: const Row(children: [Icon(Icons.check_circle, color: Colors.green), SizedBox(width: 8), Text('¡Enviado!', style: TextStyle(color: Colors.white))]),
+                                  content: const Text('El plan se ha enviado correctamente a Telegram.', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                                  actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Estupendo', style: TextStyle(color: Color(0xFF6C63FF))))],
+                                )
+                              );
+                            } else {
+                              showDialog(
+                                context: ctx,
+                                builder: (_) => AlertDialog(
+                                  backgroundColor: const Color(0xFF1A1A2E),
+                                  title: const Text('Error', style: TextStyle(color: Colors.red)),
+                                  content: Text('Error del servidor: ${response.statusCode}', style: const TextStyle(color: Colors.white70)),
+                                  actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cerrar', style: TextStyle(color: Colors.white54)))],
+                                )
+                              );
+                            }
+                          }
+                        } catch (e) {
+                          if (ctx.mounted) {
+                            showDialog(
+                              context: ctx,
+                              builder: (_) => AlertDialog(
+                                backgroundColor: const Color(0xFF1A1A2E),
+                                title: const Text('Error de conexión', style: TextStyle(color: Colors.red)),
+                                content: Text(e.toString(), style: const TextStyle(color: Colors.white70)),
+                                actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cerrar', style: TextStyle(color: Colors.white54)))],
+                              )
                             );
                           }
-                        } catch (_) {
-                          if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Error al enviar a Telegram')));
                         }
                       },
                     ),
@@ -477,9 +507,10 @@ class CalendarScreenState extends State<CalendarScreen> {
     }
   }
 
-  /// Helper que parsea el texto buscando [Ver en Maps](http...) para crear links clickables
+  /// Helper que parsea el texto buscando [Ver en Maps](http...) o URLs planas para crear links
   Widget _buildFormattedPlan(String text) {
-    final RegExp linkRegExp = RegExp(r'\[(.*?)\]\((.*?)\)');
+    // 1. Busca enlaces Markdown [Texto](URL) y 2. Busca URLs planas http/https
+    final RegExp linkRegExp = RegExp(r'\[(.*?)\]\((.*?)\)|(https?:\/\/[^\s]+)');
     final matches = linkRegExp.allMatches(text);
 
     if (matches.isEmpty) {
@@ -496,8 +527,18 @@ class CalendarScreenState extends State<CalendarScreen> {
       }
 
       // El Link
-      final String linkText = match.group(1) ?? 'Ver en Maps';
-      final String linkUrl = match.group(2) ?? '';
+      String linkText;
+      String linkUrl;
+      
+      if (match.group(3) != null) {
+        // Es una URL plana
+        linkUrl = match.group(3)!;
+        linkText = 'Ver enlace'; 
+      } else {
+        // Es un enlace Markdown
+        linkText = match.group(1) ?? 'Ver enlace';
+        linkUrl = match.group(2) ?? '';
+      }
 
       spans.add(
         WidgetSpan(
@@ -718,7 +759,8 @@ class CalendarScreenState extends State<CalendarScreen> {
     if (event.colorId == '11') eventColor = const Color(0xFFF43F5E); // Importante
     if (event.colorId == '6') eventColor = const Color(0xFFEAB308);  // Visita
     
-    final bool isLocationUrl = event.location.toLowerCase().startsWith('http');
+    final String trimmedLoc = event.location.trim();
+    final bool isLocationUrl = trimmedLoc.toLowerCase().startsWith('http');
         
     return GestureDetector(
       onTap: () => _showEventModal(event),
@@ -774,8 +816,9 @@ class CalendarScreenState extends State<CalendarScreen> {
                                 child: isLocationUrl
                                   ? GestureDetector(
                                       onTap: () async {
-                                        final uri = Uri.parse(event.location);
-                                        if (await canLaunchUrl(uri)) {
+                                        final cleanUrl = trimmedLoc.replaceAll(' ', '%20');
+                                        final uri = Uri.tryParse(cleanUrl);
+                                        if (uri != null && await canLaunchUrl(uri)) {
                                           await launchUrl(uri, mode: LaunchMode.externalApplication);
                                         }
                                       },
