@@ -353,9 +353,19 @@ class _AgendaScreenState extends State<AgendaScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          event.title,
-                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                event.title,
+                                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            if (event.reminderMinutes != null) ...[
+                              const SizedBox(width: 6),
+                              Icon(Icons.notifications_active, size: 15, color: eventColor.withOpacity(0.9)),
+                            ],
+                          ],
                         ),
                         const SizedBox(height: 6),
                         Row(

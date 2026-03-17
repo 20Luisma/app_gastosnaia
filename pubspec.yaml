@@ -1,6 +1,6 @@
 name: gastos_naia
 description: "Gastos Naia - Control de gastos familiares"
-version: 1.0.1+2
+version: 1.0.19+19
 
 environment:
   sdk: ^3.9.2
