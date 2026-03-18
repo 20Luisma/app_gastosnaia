@@ -59,7 +59,7 @@ class _HomeScreenState extends State<HomeScreen> {
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Gastos Naia', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+          const Text('Universo Naia', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
           Text(
             '${ExpenseProvider.monthNames[provider.selectedMonth]} ${provider.selectedYear}',
             style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 13),

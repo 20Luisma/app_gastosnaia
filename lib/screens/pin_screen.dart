@@ -109,7 +109,7 @@ class _PinScreenState extends State<PinScreen> with SingleTickerProviderStateMix
     switch (_mode) {
       case 'create':   return 'Elige 4 dígitos para proteger la app';
       case 'confirm':  return 'Repite el PIN que acabas de elegir';
-      default:         return 'Acceso seguro a Gastos Naia';
+      default:         return 'Acceso seguro a Universo Naia';
     }
   }
 

@@ -1,5 +1,27 @@
 import 'dart:convert';
 
+class ComunicadoAttachment {
+  final String url;
+  final String name;
+  final String type;
+
+  ComunicadoAttachment({required this.url, required this.name, required this.type});
+
+  factory ComunicadoAttachment.fromJson(Map<String, dynamic> json) {
+    return ComunicadoAttachment(
+      url: json['url']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      type: json['type']?.toString() ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'url': url,
+        'name': name,
+        'type': type,
+      };
+}
+
 class Comunicado {
   final String id;
   final String title;
@@ -8,6 +30,7 @@ class Comunicado {
   final String? fileUrl;
   final String? fileType;
   final String? fileName;
+  final List<ComunicadoAttachment> attachments;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -19,6 +42,7 @@ class Comunicado {
     this.fileUrl,
     this.fileType,
     this.fileName,
+    this.attachments = const [],
     this.createdAt,
     this.updatedAt,
   });
@@ -32,6 +56,9 @@ class Comunicado {
       fileUrl: json['fileUrl'] as String?,
       fileType: json['fileType'] as String?,
       fileName: json['fileName'] as String?,
+      attachments: json['attachments'] != null 
+          ? (json['attachments'] as List).map((e) => ComunicadoAttachment.fromJson(e as Map<String, dynamic>)).toList() 
+          : [],
       createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '')?.toLocal(),
       updatedAt: DateTime.tryParse(json['updated_at']?.toString() ?? '')?.toLocal(),
     );
@@ -45,6 +72,7 @@ class Comunicado {
       'fileUrl': fileUrl,
       'fileType': fileType,
       'fileName': fileName,
+      'attachments': attachments.map((a) => a.toJson()).toList(),
     };
     // Sólo incluir id si existe (edición). Para nuevos, PHP genera el uniqid.
     if (id.isNotEmpty) {
@@ -61,6 +89,7 @@ class Comunicado {
     String? fileUrl,
     String? fileType,
     String? fileName,
+    List<ComunicadoAttachment>? attachments,
   }) {
     return Comunicado(
       id: id ?? this.id,
@@ -70,6 +99,7 @@ class Comunicado {
       fileUrl: fileUrl ?? this.fileUrl,
       fileType: fileType ?? this.fileType,
       fileName: fileName ?? this.fileName,
+      attachments: attachments ?? this.attachments,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
     );

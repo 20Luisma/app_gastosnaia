@@ -213,36 +213,56 @@ class _DiarioScreenState extends State<DiarioScreen> {
                 style: const TextStyle(color: Colors.white70, fontSize: 15, height: 1.5),
               ),
             ],
-            if (item.fileUrl != null && item.fileUrl!.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              GestureDetector(
-                onTap: () async {
-                  final uri = Uri.parse("https://contenido.creawebes.com/GastosNaia/\${item.fileUrl}");
-                  if (await canLaunchUrl(uri)) {
-                    await launchUrl(uri, mode: LaunchMode.externalApplication);
-                  }
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF6C63FF).withAlpha(30),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFF6C63FF).withAlpha(100)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.attach_file, color: Color(0xFF6C63FF), size: 18),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Ver Archivo Adjunto',
-                        style: const TextStyle(color: Color(0xFF6C63FF), fontWeight: FontWeight.bold, fontSize: 14),
+            Builder(builder: (context) {
+              List<ComunicadoAttachment> allAttachments = [];
+              if (item.fileUrl != null && item.fileUrl!.isNotEmpty && item.attachments.isEmpty) {
+                allAttachments.add(ComunicadoAttachment(url: item.fileUrl!, name: item.fileName ?? 'Adjunto', type: item.fileType ?? ''));
+              } else if (item.attachments.isNotEmpty) {
+                allAttachments.addAll(item.attachments);
+              }
+
+              if (allAttachments.isEmpty) return const SizedBox.shrink();
+
+              return Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: allAttachments.map((att) => GestureDetector(
+                    onTap: () async {
+                      // Usar interpolation robusta en Dart en vez de escapar la template
+                      final uri = Uri.parse("https://contenido.creawebes.com/GastosNaia/" + att.url);
+                      if (await canLaunchUrl(uri)) {
+                        await launchUrl(uri, mode: LaunchMode.externalApplication);
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF6C63FF).withAlpha(30),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFF6C63FF).withAlpha(100)),
                       ),
-                    ],
-                  ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.attach_file, color: Color(0xFF6C63FF), size: 18),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              att.name.isNotEmpty ? att.name : 'Ver Archivo Adjunto',
+                              style: const TextStyle(color: Color(0xFF6C63FF), fontWeight: FontWeight.bold, fontSize: 14),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )).toList(),
                 ),
-              )
-            ]
+              );
+            })
           ],
         ),
       ),

@@ -23,9 +23,7 @@ class _DiarioModalState extends State<DiarioModal> {
   late DateTime _selectedDate;
   
   // Manejo de archivos
-  PlatformFile? _selectedFile;
-  Uint8List? _selectedFileBytes;
-  bool _removeExistingFile = false; // Flag por si el usuario borra el adjunto preexistente
+  List<PlatformFile> _newSelectedFiles = [];
 
   bool _isLoading = false;
   final DiarioService _diarioService = DiarioService();
@@ -82,13 +80,12 @@ class _DiarioModalState extends State<DiarioModal> {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.any,
         withData: true, // Importante para poder subirlo desde bytes (web/movil unificado)
+        allowMultiple: true,
       );
 
       if (result != null && result.files.isNotEmpty) {
         setState(() {
-          _selectedFile = result.files.first;
-          _selectedFileBytes = result.files.first.bytes;
-          _removeExistingFile = true; // Si elegimos uno nuevo, el anterior se descarta
+          _newSelectedFiles.addAll(result.files);
         });
       }
     } catch (e) {
@@ -98,14 +95,6 @@ class _DiarioModalState extends State<DiarioModal> {
         );
       }
     }
-  }
-
-  void _removeSelectedFile() {
-    setState(() {
-      _selectedFile = null;
-      _selectedFileBytes = null;
-      _removeExistingFile = true;
-    });
   }
 
   Future<void> _save() async {
@@ -122,22 +111,25 @@ class _DiarioModalState extends State<DiarioModal> {
       String? finalFileUrl = widget.comunicadoToEdit?.fileUrl;
       String? finalFileType = widget.comunicadoToEdit?.fileType;
       String? finalFileName = widget.comunicadoToEdit?.fileName;
+      List<ComunicadoAttachment> finalAttachments = List.from(widget.comunicadoToEdit?.attachments ?? []);
 
-      // Si el usuario borró el archivo existente de forma explícita
-      if (_removeExistingFile && _selectedFile == null) {
-        finalFileUrl = null;
-        finalFileType = null;
-        finalFileName = null;
-      }
-
-      // Si hay un archivo NUEVO seleccionado, subirlo primero
-      if (_selectedFile != null && _selectedFileBytes != null) {
-        final uploadedUrl = await _diarioService.uploadAttachment(_selectedFileBytes!, _selectedFile!.name);
-        finalFileUrl = uploadedUrl;
-        finalFileName = _selectedFile!.name;
-        // Determinar tipo según extensión 
-        final ext = _selectedFile!.extension?.toLowerCase() ?? '';
-        finalFileType = ext == 'pdf' ? 'application/pdf' : 'image/$ext';
+      // Si hay archivos NUEVOS seleccionados, subirlos uno por uno
+      for (var file in _newSelectedFiles) {
+        if (file.bytes != null) {
+          final uploadedUrl = await _diarioService.uploadAttachment(file.bytes!, file.name);
+          final ext = file.extension?.toLowerCase() ?? '';
+          final type = ext == 'pdf' ? 'application/pdf' : 'image/$ext';
+          
+          final newAtt = ComunicadoAttachment(url: uploadedUrl, name: file.name, type: type);
+          finalAttachments.add(newAtt);
+          
+          // Mantener fields legacy sincronizados con el primero que se sube, para retrocompatibilidad
+          if (finalFileUrl == null) {
+            finalFileUrl = newAtt.url;
+            finalFileName = newAtt.name;
+            finalFileType = newAtt.type;
+          }
+        }
       }
 
       final comunicado = Comunicado(
@@ -148,6 +140,7 @@ class _DiarioModalState extends State<DiarioModal> {
         fileUrl: finalFileUrl,
         fileType: finalFileType,
         fileName: finalFileName,
+        attachments: finalAttachments,
       );
 
       await _diarioService.saveComunicado(comunicado);
@@ -310,12 +303,30 @@ class _DiarioModalState extends State<DiarioModal> {
   }
 
   Widget _buildAttachmentSection() {
-    String? displayFileName;
-    
-    if (_selectedFile != null) {
-      displayFileName = _selectedFile!.name;
-    } else if (!_removeExistingFile && widget.comunicadoToEdit?.fileUrl != null) {
-      displayFileName = widget.comunicadoToEdit?.fileName ?? 'Archivo adjunto';
+    List<Widget> attachmentWidgets = [];
+
+    // Legacy fileUrl
+    if (widget.comunicadoToEdit != null && widget.comunicadoToEdit!.fileUrl != null && widget.comunicadoToEdit!.attachments.isEmpty) {
+      attachmentWidgets.add(_buildAttachmentItem(
+        widget.comunicadoToEdit!.fileName ?? 'Archivo adjunto',
+        onRemove: null,
+      ));
+    }
+
+    // Existing attachments
+    if (widget.comunicadoToEdit != null) {
+      for (var att in widget.comunicadoToEdit!.attachments) {
+        attachmentWidgets.add(_buildAttachmentItem(att.name, onRemove: null));
+      }
+    }
+
+    // New selected files
+    for (int i = 0; i < _newSelectedFiles.length; i++) {
+      attachmentWidgets.add(_buildAttachmentItem(
+        _newSelectedFiles[i].name,
+        onRemove: () => setState(() => _newSelectedFiles.removeAt(i)),
+        isNew: true,
+      ));
     }
 
     return Container(
@@ -325,42 +336,65 @@ class _DiarioModalState extends State<DiarioModal> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.attach_file, color: Color(0xFF6C63FF), size: 20),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Archivos adjuntos',
+                  style: TextStyle(color: Colors.white54, fontSize: 14),
+                ),
+              ),
+              TextButton(
+                onPressed: _pickFile,
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFF6C63FF),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Text('Añadir', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+          if (attachmentWidgets.isNotEmpty) const SizedBox(height: 12),
+          ...attachmentWidgets,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAttachmentItem(String name, {VoidCallback? onRemove, bool isNew = false}) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A2E),
+        borderRadius: BorderRadius.circular(8),
+      ),
       child: Row(
         children: [
-          const Icon(Icons.attach_file, color: Color(0xFF6C63FF), size: 20),
-          const SizedBox(width: 12),
+          Icon(isNew ? Icons.upload_file : Icons.insert_drive_file, color: const Color(0xFF6C63FF), size: 16),
+          const SizedBox(width: 8),
           Expanded(
-            child: displayFileName != null
-                ? Text(
-                    displayFileName,
-                    style: const TextStyle(color: Colors.white, fontSize: 14),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  )
-                : const Text(
-                    'Adjuntar archivo...',
-                    style: TextStyle(color: Colors.white54, fontSize: 14),
-                  ),
+            child: Text(
+              name,
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-          if (displayFileName != null)
+          if (onRemove != null)
             IconButton(
-              icon: const Icon(Icons.close, color: Colors.white54, size: 20),
-              onPressed: _removeSelectedFile,
-              tooltip: 'Quitar archivo',
+              icon: const Icon(Icons.close, color: Colors.white54, size: 18),
+              onPressed: onRemove,
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),
             )
-          else
-            TextButton(
-              onPressed: _pickFile,
-              style: TextButton.styleFrom(
-                foregroundColor: const Color(0xFF6C63FF),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              child: const Text('Explorar', style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
         ],
       ),
     );

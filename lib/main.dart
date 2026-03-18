@@ -42,7 +42,7 @@ class GastosNaiaApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ExpenseProvider()),
       ],
       child: MaterialApp(
-        title: 'Gastos Naia',
+        title: 'Universo Naia',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(

@@ -78,7 +78,7 @@ class _SplashScreenState extends State<SplashScreen>
                 ),
                 const SizedBox(height: 24),
                 const Text(
-                  'Gastos Naia',
+                  'Universo Naia',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 32,

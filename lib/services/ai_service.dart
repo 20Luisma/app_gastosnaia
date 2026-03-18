@@ -21,7 +21,7 @@ class AiService {
       'messages': [
         {
           'role': 'system',
-          'content': '''Eres Alfred, el asistente contable de la familia para la app Gastos Naia.
+          'content': '''Eres Alfred, el asistente contable de la familia para la app Universo Naia.
 Historial completo (Métricas precalculadas desde Firebase): $context
 
 REGLA 1: 'total_final' es "Lo que le deposito a Naia". 'transferencia_naia' es "Total / 2".
